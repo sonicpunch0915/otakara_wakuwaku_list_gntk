@@ -5,120 +5,150 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="お買い物リスト v6">
-    <title>お買い物リスト v6 (Supabase)</title>
+    <meta name="apple-mobile-web-app-title" content="お買い物リスト">
+    <title>お買い物リスト v10</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <!-- 簡易ログイン画面 -->
-    <div id="login-overlay" class="login-overlay">
-        <div class="login-box">
-            <h2>🔐 お買い物リスト v6</h2>
+
+    <!-- パスワードログイン -->
+    <div id="login-overlay" class="overlay" style="display:none;">
+        <div class="overlay-box">
+            <div class="overlay-icon">🛍️</div>
+            <h2>お買い物リスト</h2>
             <p>パスワードを入力してください</p>
-            <input type="password" id="login-password" placeholder="パスワード">
+            <input type="password" id="login-password" placeholder="パスワード" autocomplete="current-password">
             <button id="login-btn" class="btn-primary">ログイン</button>
             <p id="login-error" class="error-msg"></p>
         </div>
     </div>
 
-    <div class="app-container" id="main-app" style="display: none;">
+    <!-- 初回ユーザー設定 -->
+    <div id="user-config-overlay" class="overlay" style="display:none;">
+        <div class="overlay-box">
+            <div class="overlay-icon">✨</div>
+            <h2>はじめに登録</h2>
+            <p>なまえとアイコンを選んでね</p>
+            <input type="text" id="config-user-name" placeholder="なまえ" maxlength="10">
+            <div class="icon-selector" id="config-icon-selector"></div>
+            <button id="config-save-btn" class="btn-primary">保存して開始</button>
+            <p id="config-error" class="error-msg"></p>
+        </div>
+    </div>
+
+    <div class="app-container" id="main-app" style="display:none;">
         <header>
-            <div class="title-area">
-                <h1>お買い物リスト v6</h1>
-                <button id="refresh-data-btn" class="btn-refresh" title="最新の状態に更新">🔃</button>
-            </div>
-            <div class="header-buttons">
-                <button id="backup-btn" class="btn-secondary">バックアップ</button>
-                <button id="restore-btn" class="btn-secondary">復元</button>
+            <div class="header-top">
+                <div class="user-badge" id="current-user-badge" title="プロフィール変更">
+                    <span id="current-user-display">読み込み中...</span>
+                </div>
+                <div class="title-area">
+                    <h1>お買い物リスト</h1>
+                    <button id="refresh-data-btn" class="btn-icon" title="更新">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                </div>
+                <div class="header-buttons">
+                    <!-- ハンバーガーメニュー -->
+                    <button id="hamburger-btn" class="btn-icon" title="メニュー">
+                        <i class="bi bi-list"></i>
+                    </button>
+                    <div id="hamburger-menu" class="hamburger-menu" style="display:none;">
+                        <button id="backup-btn" class="menu-item">
+                            <i class="bi bi-box-arrow-down"></i> エクスポート
+                        </button>
+                        <label for="restore-input" class="menu-item" style="cursor:pointer;">
+                            <i class="bi bi-box-arrow-in-down"></i> インポート
+                        </label>
+                        <input type="file" id="restore-input" accept=".json" style="display:none;">
+                        <div class="menu-divider"></div>
+                        <button id="logout-btn" class="menu-item menu-item-danger">
+                            <i class="bi bi-box-arrow-right"></i> ログアウト
+                        </button>
+                    </div>
+                </div>
             </div>
         </header>
 
         <nav class="tab-nav">
             <button class="tab-btn active" data-tab="list">買い物リスト</button>
+            <button class="tab-btn" data-tab="person">人物別</button>
             <button class="tab-btn" data-tab="map">地図</button>
         </nav>
 
         <!-- 買い物リストタブ -->
         <div id="list-tab" class="tab-content active">
-            <div class="add-item-section">
-                <h2>新しいアイテムを追加</h2>
-                <form id="add-item-form">
-                    <div class="form-group">
-                        <label for="space-no">スペースNo</label>
-                        <input type="text" id="space-no" placeholder="例: て01a, A-23b" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="item-name">商品名</label>
-                        <input type="text" id="item-name" placeholder="商品名を入力" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="item-price">価格</label>
-                        <input type="number" id="item-price" placeholder="0" min="0">
-                    </div>
-                    <div class="form-group">
-                        <label for="item-quantity">数量</label>
-                        <input type="number" id="item-quantity" value="1" min="1">
-                    </div>
-                    <div class="form-group">
-                        <label for="item-notes">備考</label>
-                        <textarea id="item-notes" placeholder="備考を入力（任意）" rows="2"></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label for="item-image">サムネイル</label>
-                        <input type="file" id="item-image" accept="image/*">
-                        <div id="image-preview"></div>
-                    </div>
-                    <button type="submit" class="btn-primary">追加</button>
-                </form>
+            <div class="list-header">
+                <h2>買い物リスト</h2>
+                <div class="list-controls">
+                    <button id="open-add-modal-btn" class="btn-add">＋ 追加</button>
+                    <select id="sort-option" onchange="renderShoppingList()">
+                        <option value="spaceNo">スペース順</option>
+                        <option value="name">商品名順</option>
+                        <option value="price">価格順</option>
+                        <option value="created">追加順</option>
+                    </select>
+                </div>
             </div>
 
-            <div class="shopping-list">
-                <div class="list-header">
-                    <h2>買い物リスト</h2>
-                    <div class="list-controls">
-                        <div class="sort-controls">
-                            <label for="sort-option">並び順:</label>
-                            <select id="sort-option" onchange="renderShoppingList()">
-                                <option value="spaceNo">スペースNo順</option>
-                                <option value="name">商品名順</option>
-                                <option value="price">価格順</option>
-                                <option value="created">追加順</option>
-                            </select>
-                        </div>
-                        <div class="view-controls">
-                            <button id="expand-all" class="btn-small">全て展開</button>
-                            <button id="collapse-all" class="btn-small">全て折りたたみ</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="list-stats">
-                    <span>合計: <span id="total-amount">¥0</span></span>
-                    <span>アイテム数: <span id="item-count">0</span></span>
-                    <span>スペース数: <span id="space-count">0</span></span>
-                </div>
-                <div id="shopping-items"></div>
+            <div class="list-stats">
+                <div class="stat-item"><span class="stat-label">合計</span><span id="total-amount" class="stat-value">¥0</span></div>
+                <div class="stat-item"><span class="stat-label">個数</span><span id="item-count" class="stat-value">0</span></div>
+                <div class="stat-item"><span class="stat-label">場所</span><span id="space-count" class="stat-value">0</span></div>
             </div>
+
+            <div class="view-toggles">
+                <button id="toggle-all-btn" class="btn-small">全て閉じる</button>
+            </div>
+
+            <div id="shopping-items"></div>
+        </div>
+
+        <!-- 人物別タブ -->
+        <div id="person-tab" class="tab-content">
+            <div class="list-header">
+                <h2>人物別まとめ</h2>
+            </div>
+            <div id="person-accordion-container"></div>
         </div>
 
         <!-- 地図タブ -->
         <div id="map-tab" class="tab-content">
             <div class="map-controls">
                 <input type="file" id="map-upload" accept="image/*,.svg">
-                <button id="create-sample-map" class="btn-secondary">サンプル地図</button>
-                <button id="update-map-colors" class="btn-secondary">地図更新</button>
-                <button id="clear-map" class="btn-secondary" style="background: #f44336;">地図削除</button>
+                <button id="clear-map" class="btn-danger">地図削除</button>
             </div>
             <div class="map-container">
-                <div id="map-display">
-                    <p>地図をアップロードするか、サンプル地図を作成してください</p>
-                </div>
+                <div id="map-display"><p>地図をアップロードしてください</p></div>
             </div>
-            <div id="space-info-panel" class="space-info-panel">
-                <div class="space-info-header">
-                    <h3 id="space-info-title">スペース情報</h3>
-                    <button id="close-space-info" class="btn-close">×</button>
+        </div>
+
+        <!-- 追加モーダル -->
+        <div id="add-item-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>新しいアイテムを追加</h3>
+                    <button class="btn-close" onclick="closeAddModal()">×</button>
                 </div>
-                <div id="space-info-content">スペースをクリックして詳細を表示</div>
+                <form id="add-item-form">
+                    <div class="form-group"><label>スペースNo</label><input type="text" id="space-no" required></div>
+                    <div class="form-group"><label>商品名</label><input type="text" id="item-name" required></div>
+                    <div class="form-row">
+                        <div class="form-group"><label>価格</label><input type="number" id="item-price" value="0" min="0"></div>
+                        <div class="form-group"><label>数量</label><input type="number" id="item-quantity" value="1" min="1"></div>
+                    </div>
+                    <div class="form-group"><label>備考</label><textarea id="item-notes" rows="2"></textarea></div>
+                    <div class="form-group">
+                        <label>画像</label>
+                        <input type="file" id="item-image" accept="image/*">
+                        <div id="image-preview" class="img-preview"></div>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn-cancel" onclick="closeAddModal()">キャンセル</button>
+                        <button type="submit" class="btn-primary">追加</button>
+                    </div>
+                </form>
             </div>
         </div>
 
@@ -131,33 +161,20 @@
                 </div>
                 <form id="edit-item-form">
                     <input type="hidden" id="edit-item-id">
-                    <div class="form-group">
-                        <label for="edit-space-no">スペースNo</label>
-                        <input type="text" id="edit-space-no" required>
+                    <div class="form-group"><label>スペースNo</label><input type="text" id="edit-space-no" required></div>
+                    <div class="form-group"><label>商品名</label><input type="text" id="edit-item-name" required></div>
+                    <div class="form-row">
+                        <div class="form-group"><label>価格</label><input type="number" id="edit-item-price" min="0"></div>
+                        <div class="form-group"><label>数量</label><input type="number" id="edit-item-quantity" min="1"></div>
                     </div>
+                    <div class="form-group"><label>備考</label><textarea id="edit-item-notes" rows="2"></textarea></div>
                     <div class="form-group">
-                        <label for="edit-item-name">商品名</label>
-                        <input type="text" id="edit-item-name" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="edit-item-price">価格</label>
-                        <input type="number" id="edit-item-price" min="0">
-                    </div>
-                    <div class="form-group">
-                        <label for="edit-item-quantity">数量</label>
-                        <input type="number" id="edit-item-quantity" min="1">
-                    </div>
-                    <div class="form-group">
-                        <label for="edit-item-notes">備考</label>
-                        <textarea id="edit-item-notes" placeholder="備考を入力（任意）" rows="2"></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label for="edit-item-image">サムネイル変更</label>
+                        <label>画像変更</label>
                         <input type="file" id="edit-item-image" accept="image/*">
-                        <div id="edit-image-preview"></div>
+                        <div id="edit-image-preview" class="img-preview"></div>
                     </div>
                     <div class="modal-actions">
-                        <button type="button" class="btn-secondary" onclick="closeEditModal()">キャンセル</button>
+                        <button type="button" class="btn-cancel" onclick="closeEditModal()">戻る</button>
                         <button type="submit" class="btn-primary">保存</button>
                     </div>
                 </form>
@@ -165,7 +182,6 @@
         </div>
     </div>
 
-    <!-- Supabase Client Library -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/script.js"></script>
 </body>
