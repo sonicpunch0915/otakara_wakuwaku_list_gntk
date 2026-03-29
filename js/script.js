@@ -234,7 +234,7 @@ function renderShoppingList() {
                 <h3><i class="bi bi-pin-angle-fill"></i> ${spaceNo}</h3>
                 <div class="space-card-meta">
                     <span style="font-size:0.78rem; color:#9e9e9e;">${items.length}件</span>
-                    <span class="badge ${allDone ? 'badge-done' : 'badge-pending'}">${allDone ? '完了' : '未購入'}</span>
+                    <span class="badge ${allDone ? 'badge-done' : 'badge-pending'}">${allDone ? 'ゲット' : '未'}</span>
                     <span style="color:#9e9e9e; font-size:0.85rem;">${isExp ? '▲' : '▼'}</span>
                 </div>
             </div>
@@ -283,14 +283,14 @@ function renderItemRow(item) {
                     </span>
                 </div>
                 <div class="item-price">¥${item.price.toLocaleString()} × ${item.quantity} = ¥${(item.price * item.quantity).toLocaleString()}</div>
-                ${item.notes ? `<div class="item-notes">⚠ ${item.notes}</div>` : ''}
+                ${item.notes ? `<div class="item-notes">※ ${item.notes}</div>` : ''}
             </div>
             <div class="item-actions">
                 <div class="item-wanted-icons">${iconsHtml}</div>
                 <div class="item-action-btns">
                     <button class="btn-sm ${item.isPurchased ? 'btn-sm-done' : 'btn-sm-success'}"
                             onclick="toggleStatus('${item.id}', ${item.isPurchased})">
-                        ${item.isPurchased ? '戻す' : '購入済み'}
+                        ${item.isPurchased ? '戻す' : 'ゲット'}
                     </button>
                     <button class="btn-sm btn-sm-edit" onclick="openEditModal('${item.id}')">編集</button>
                     <button class="btn-sm btn-sm-danger" onclick="deleteItem('${item.id}')">削除</button>
@@ -338,7 +338,7 @@ function renderPersonList() {
             </div>
             <div class="person-content" style="display:${isExp ? 'block' : 'none'}">
                 <table class="person-table">
-                    <thead><tr><th>場所</th><th>品名</th><th>数</th><th>金額</th></tr></thead>
+                    <thead><tr><th>スペース</th><th>品名</th><th>数</th><th>金額</th></tr></thead>
                     <tbody>
                         ${userItems.map(i => `
                             <tr>
