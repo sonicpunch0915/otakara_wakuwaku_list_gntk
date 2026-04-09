@@ -180,6 +180,12 @@
                 </form>
             </div>
         </div>
+
+        <!-- 画像ズームモーダル -->
+        <div id="image-zoom-overlay" class="zoom-overlay" onclick="closeImageZoom()">
+            <span class="zoom-close">&times;</span>
+            <img id="zoomed-image" class="zoom-content" src="" alt="拡大画像">
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
