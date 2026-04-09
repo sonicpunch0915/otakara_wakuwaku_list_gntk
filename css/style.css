@@ -583,3 +583,58 @@ header h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: 0.02em; }
 .map-container { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; min-height: 200px; }
 #map-display { padding: 20px; text-align: center; color: var(--text-sub); }
 #map-display img, #map-display svg { max-width: 100%; }
+
+/* ===== 画像ズームモーダル ===== */
+.zoom-overlay {
+    display: none;
+    position: fixed;
+    z-index: 3000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.9);
+    cursor: pointer;
+    justify-content: center;
+    align-items: center;
+    animation: fadeIn 0.2s;
+}
+.zoom-content {
+    margin: auto;
+    display: block;
+    max-width: 95%;
+    max-height: 95%;
+    object-fit: contain;
+    border-radius: 4px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    animation: zoomIn 0.2s;
+}
+.zoom-close {
+    position: absolute;
+    top: 20px;
+    right: 35px;
+    color: #f1f1f1;
+    font-size: 40px;
+    font-weight: bold;
+    transition: 0.3s;
+    line-height: 1;
+}
+.zoom-close:hover {
+    color: #bbb;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+@keyframes zoomIn {
+    from { transform: scale(0.9); }
+    to { transform: scale(1); }
+}
+
+@media only screen and (max-width: 700px){
+    .zoom-content { width: 100%; }
+}
