@@ -30,6 +30,7 @@ let expandedSpaces = new Set();
 let expandedPersons = new Set();
 let isFirstLoad = true;
 let isSubscribed = false;
+let pastedFile = null;
 
 // ===== 起動 =====
 document.addEventListener('DOMContentLoaded', initApp);
@@ -129,8 +130,11 @@ function setupEventListeners() {
     document.getElementById('backup-btn').addEventListener('click', exportData);
     document.getElementById('restore-input').addEventListener('change', importData);
     document.getElementById('toggle-all-btn').addEventListener('click', toggleAllSpaces);
-    document.getElementById('item-image').addEventListener('change', e => handleImagePreview(e, 'image-preview'));
-    document.getElementById('edit-item-image').addEventListener('change', e => handleImagePreview(e, 'edit-image-preview'));
+    document.getElementById('item-image').addEventListener('change', e => { pastedFile = null; handleImagePreview(e, 'image-preview'); });
+    document.getElementById('edit-item-image').addEventListener('change', e => { pastedFile = null; handleImagePreview(e, 'edit-image-preview'); });
+    
+    // コピペ(Ctrl+V)対応
+    window.addEventListener('paste', handleGlobalPaste);
 
     document.getElementById('current-user-badge').addEventListener('click', () => {
         if (confirm('名前やアイコンを変更しますか？')) {
@@ -206,6 +210,55 @@ async function uploadImageToStorage(file) {
     } catch (e) {
         console.error('Upload error:', e);
         return null;
+    }
+}
+
+// ===== 画像ズームモーダル =====
+function openImageZoom(url) {
+    const overlay = document.getElementById('image-zoom-overlay');
+    const img = document.getElementById('zoomed-image');
+    img.src = url;
+    overlay.style.display = 'flex';
+    document.body.style.overflow = 'hidden'; // 背景スクロール禁止
+}
+
+function closeImageZoom() {
+    const overlay = document.getElementById('image-zoom-overlay');
+    overlay.style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+// ===== クリップボード貼り付け対応 =====
+async function handleGlobalPaste(e) {
+    // モーダルが開いている時だけ反応する
+    const addModal = document.getElementById('add-item-modal');
+    const editModal = document.getElementById('edit-modal');
+    const isAddOpen = addModal.style.display === 'flex';
+    const isEditOpen = editModal.style.display === 'flex';
+
+    if (!isAddOpen && !isEditOpen) return;
+
+    const items = e.clipboardData.items;
+    for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+            const file = items[i].getAsFile();
+            if (file) {
+                pastedFile = file;
+                const previewId = isAddOpen ? 'image-preview' : 'edit-image-preview';
+                
+                // プレビュー表示
+                const reader = new FileReader();
+                reader.onload = ev => {
+                    document.getElementById(previewId).innerHTML = `<img src="${ev.target.result}" style="max-width:100px; border-radius:6px;"> <span style="font-size:0.7rem; color:var(--success); d-block">貼り付け済み</span>`;
+                };
+                reader.readAsDataURL(file);
+                
+                // ファイル入力をリセット（手動選択とバッティングしないように）
+                const inputId = isAddOpen ? 'item-image' : 'edit-item-image';
+                document.getElementById(inputId).value = '';
+                break;
+            }
+        }
     }
 }
 
@@ -370,7 +423,7 @@ function renderItemRow(item) {
     ).join('');
 
     const thumb = item.imageUrl
-        ? `<img src="${item.imageUrl}" class="item-thumb" onclick="window.open('${item.imageUrl}')" alt="">`
+        ? `<img src="${item.imageUrl}" class="item-thumb" onclick="openImageZoom('${item.imageUrl}')" alt="">`
         : `<div class="item-thumb-empty">No Image</div>`;
 
     return `
@@ -558,9 +611,10 @@ async function handleHeartToggle(itemId) {
 function openAddModal() {
     document.getElementById('add-item-form').reset();
     document.getElementById('image-preview').innerHTML = '';
+    pastedFile = null;
     showOverlay('add-item-modal');
 }
-function closeAddModal() { hideOverlay('add-item-modal'); }
+function closeAddModal() { pastedFile = null; hideOverlay('add-item-modal'); }
 
 async function handleAddItem(e) {
     e.preventDefault();
@@ -580,7 +634,7 @@ async function handleAddItem(e) {
         wanted_users: `${currentUser.name}:${currentUser.icon}:${qty}`
     };
 
-    const file = document.getElementById('item-image').files[0];
+    const file = document.getElementById('item-image').files[0] || pastedFile;
     if (file) {
         const url = await uploadImageToStorage(file);
         if (url) data.image_url = url;
@@ -619,9 +673,10 @@ function openEditModal(id) {
     document.getElementById('edit-image-preview').innerHTML = item.imageUrl
         ? `<img src="${item.imageUrl}" style="max-width:100px; border-radius:6px;">`
         : '';
+    pastedFile = null;
     showOverlay('edit-modal');
 }
-function closeEditModal() { hideOverlay('edit-modal'); }
+function closeEditModal() { pastedFile = null; hideOverlay('edit-modal'); }
 
 async function handleEditItem(e) {
     e.preventDefault();
@@ -649,7 +704,7 @@ async function handleEditItem(e) {
         wanted_users: wantedStr
     };
 
-    const file = document.getElementById('edit-item-image').files[0];
+    const file = document.getElementById('edit-item-image').files[0] || pastedFile;
     if (file) {
         const url = await uploadImageToStorage(file);
         if (url) body.image_url = url;
