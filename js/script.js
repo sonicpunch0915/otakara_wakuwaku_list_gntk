@@ -1,5 +1,5 @@
 /*
-  お買い物リスト v10
+  お買い物リスト v12 - Real-time & High Performance
 */
 
 const SUPABASE_URL = 'https://eepnykeysqokgqesyihq.supabase.co';
@@ -7,8 +7,9 @@ const SUPABASE_KEY = 'sb_publishable_2XqYDT8NWQICxIK0DTqu5A_D0mgnh2v';
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const APP_PASSWORD = 'gintaka0910';
-const STORAGE_KEY_AUTH = 'shopping_app_v10_auth';
-const STORAGE_KEY_USER = 'shopping_app_v10_user';
+const STORAGE_KEY_AUTH = 'shopping_app_v12_auth';
+const STORAGE_KEY_USER = 'shopping_app_v12_user';
+const STORAGE_BUCKET = 'images';
 
 // icon/ フォルダの画像ファイルを使用
 const ICON_LIST = [
@@ -28,6 +29,7 @@ let currentUser = { name: '', icon: '' };
 let expandedSpaces = new Set();
 let expandedPersons = new Set();
 let isFirstLoad = true;
+let isSubscribed = false;
 
 // ===== 起動 =====
 document.addEventListener('DOMContentLoaded', initApp);
@@ -149,6 +151,127 @@ function setupEventListeners() {
         hamburgerMenu.style.display = 'none';
     });
     hamburgerMenu.addEventListener('click', e => e.stopPropagation());
+
+    // 検索窓などが必要な場合、ここに追加
+}
+
+// ===== 画像圧縮 =====
+async function compressImage(file, maxWidth = 800) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+
+                if (width > maxWidth) {
+                    height *= maxWidth / width;
+                    width = maxWidth;
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                canvas.toBlob((blob) => {
+                    resolve(blob);
+                }, 'image/jpeg', 0.82); // 圧縮率 0.82
+            };
+        };
+    });
+}
+
+// ===== 画像アップロード (Storage) =====
+async function uploadImageToStorage(file) {
+    try {
+        const compressedBlob = await compressImage(file);
+        const fileName = `${Date.now()}_${Math.random().toString(36).slice(-4)}.jpg`;
+        const filePath = `items/${fileName}`;
+
+        const { data, error } = await supabaseClient.storage
+            .from(STORAGE_BUCKET)
+            .upload(filePath, compressedBlob);
+        
+        if (error) throw error;
+
+        const { data: { publicUrl } } = supabaseClient.storage
+            .from(STORAGE_BUCKET)
+            .getPublicUrl(filePath);
+        
+        return publicUrl;
+    } catch (e) {
+        console.error('Upload error:', e);
+        return null;
+    }
+}
+
+// ===== リアルタイム同期設定 =====
+function setupRealtimeSubscription() {
+    if (isSubscribed) return;
+    
+    supabaseClient
+        .channel('shopping-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'shopping_items' }, (payload) => {
+            console.log('Realtime change:', payload);
+            handleRealtimeEvent(payload);
+        })
+        .subscribe();
+    
+    isSubscribed = true;
+}
+
+function handleRealtimeEvent(payload) {
+    const { eventType, new: newItem, old: oldItem } = payload;
+
+    if (eventType === 'INSERT') {
+        // すでにリストにあるか確認（自分が追加した場合はすでにあるはず）
+        if (!shoppingList.some(i => i.id === newItem.id)) {
+            shoppingList.unshift(mapItemData(newItem));
+            renderAll();
+        }
+    } else if (eventType === 'UPDATE') {
+        const idx = shoppingList.findIndex(i => i.id === newItem.id);
+        if (idx !== -1) {
+            shoppingList[idx] = mapItemData(newItem);
+            renderAll();
+        }
+    } else if (eventType === 'DELETE') {
+        shoppingList = shoppingList.filter(i => i.id !== oldItem.id);
+        renderAll();
+    }
+}
+
+function mapItemData(item) {
+    let wantedUsers = [];
+    if (item.wanted_users && item.wanted_users.trim() !== '') {
+        wantedUsers = item.wanted_users.split(',').filter(u => u.trim() !== '');
+    }
+    if (wantedUsers.length === 0) {
+        wantedUsers = [`${item.user_name || '全員'}:${item.user_icon || 'icon01.png'}:1`];
+    }
+    return {
+        id: item.id,
+        spaceNo: item.space_no,
+        name: item.item_name,
+        price: item.price || 0,
+        quantity: item.quantity || 1,
+        notes: item.notes || '',
+        imageUrl: item.image_url || null,
+        isPurchased: item.is_purchased || false,
+        userName: item.user_name || '',
+        userIcon: item.user_icon || 'icon01.png',
+        wantedUsers
+    };
+}
+
+function renderAll() {
+    renderShoppingList();
+    renderPersonList();
+    updateStats();
 }
 
 // ===== データ読み込み =====
@@ -160,37 +283,15 @@ async function loadData() {
             .order('created_at', { ascending: false });
         if (error) throw error;
 
-        shoppingList = data.map(item => {
-            let wantedUsers = [];
-            if (item.wanted_users && item.wanted_users.trim() !== '') {
-                wantedUsers = item.wanted_users.split(',').filter(u => u.trim() !== '');
-            }
-            if (wantedUsers.length === 0) {
-                wantedUsers = [`${item.user_name || '全員'}:${item.user_icon || 'icon01.png'}:1`];
-            }
-            return {
-                id: item.id,
-                spaceNo: item.space_no,
-                name: item.item_name,
-                price: item.price || 0,
-                quantity: item.quantity || 1,
-                notes: item.notes || '',
-                imageUrl: item.image_url || null,
-                isPurchased: item.is_purchased || false,
-                userName: item.user_name || '',
-                userIcon: item.user_icon || 'icon01.png',
-                wantedUsers
-            };
-        });
+        shoppingList = data.map(item => mapItemData(item));
 
         if (isFirstLoad) {
             shoppingList.forEach(i => expandedSpaces.add(i.spaceNo));
             isFirstLoad = false;
         }
 
-        renderShoppingList();
-        renderPersonList();
-        updateStats();
+        renderAll();
+        setupRealtimeSubscription(); // リアルタイム同期開始
     } catch (e) {
         console.error('loadData error:', e);
     }
@@ -234,7 +335,7 @@ function renderShoppingList() {
                 <h3><i class="bi bi-pin-angle-fill"></i> ${spaceNo}</h3>
                 <div class="space-card-meta">
                     <span style="font-size:0.78rem; color:#9e9e9e;">${items.length}件</span>
-                    <span class="badge ${allDone ? 'badge-done' : 'badge-pending'}">${allDone ? 'ゲット' : '未'}</span>
+                    <span class="badge ${allDone ? 'badge-done' : 'badge-pending'}">${allDone ? '完了' : '未購入'}</span>
                     <span style="color:#9e9e9e; font-size:0.85rem;">${isExp ? '▲' : '▼'}</span>
                 </div>
             </div>
@@ -283,14 +384,14 @@ function renderItemRow(item) {
                     </span>
                 </div>
                 <div class="item-price">¥${item.price.toLocaleString()} × ${item.quantity} = ¥${(item.price * item.quantity).toLocaleString()}</div>
-                ${item.notes ? `<div class="item-notes">※ ${item.notes}</div>` : ''}
+                ${item.notes ? `<div class="item-notes">⚠ ${item.notes}</div>` : ''}
             </div>
             <div class="item-actions">
                 <div class="item-wanted-icons">${iconsHtml}</div>
                 <div class="item-action-btns">
                     <button class="btn-sm ${item.isPurchased ? 'btn-sm-done' : 'btn-sm-success'}"
                             onclick="toggleStatus('${item.id}', ${item.isPurchased})">
-                        ${item.isPurchased ? '戻す' : 'ゲット'}
+                        ${item.isPurchased ? '戻す' : '購入済み'}
                     </button>
                     <button class="btn-sm btn-sm-edit" onclick="openEditModal('${item.id}')">編集</button>
                     <button class="btn-sm btn-sm-danger" onclick="deleteItem('${item.id}')">削除</button>
@@ -338,7 +439,7 @@ function renderPersonList() {
             </div>
             <div class="person-content" style="display:${isExp ? 'block' : 'none'}">
                 <table class="person-table">
-                    <thead><tr><th>スペース</th><th>品名</th><th>数</th><th>金額</th></tr></thead>
+                    <thead><tr><th>場所</th><th>品名</th><th>数</th><th>金額</th></tr></thead>
                     <tbody>
                         ${userItems.map(i => `
                             <tr>
@@ -387,12 +488,23 @@ function togglePerson(name) {
 
 // ===== 購入状態トグル =====
 async function toggleStatus(id, cur) {
+    // 楽観的UI更新
+    const item = shoppingList.find(i => i.id === id);
+    if (item) {
+        item.isPurchased = !cur;
+        renderShoppingList();
+        renderPersonList();
+        updateStats();
+    }
+
     const { error } = await supabaseClient
         .from('shopping_items')
         .update({ is_purchased: !cur })
         .eq('id', id);
-    if (error) console.error('toggleStatus error:', error);
-    await loadData();
+    if (error) {
+        console.error('toggleStatus error:', error);
+        await loadData();
+    }
 }
 
 // ===== ハートボタン（追加/キャンセル）=====
@@ -411,17 +523,35 @@ async function handleHeartToggle(itemId) {
     }
 
     if (parsed.length === 0) {
-        await supabaseClient.from('shopping_items').delete().eq('id', itemId);
+        // 楽観的UI削除
+        shoppingList = shoppingList.filter(i => i.id !== itemId);
+        renderShoppingList();
+        renderPersonList();
+        updateStats();
+
+        const { error } = await supabaseClient.from('shopping_items').delete().eq('id', itemId);
+        if (error) {
+            console.error('heartToggle error:', error);
+            await loadData();
+        }
     } else {
         const newQty = parsed.reduce((s, u) => s + u.qty, 0);
+        
+        // 楽観的UI更新
+        item.wantedUsers = serializeWantedUsers(parsed).split(',');
+        item.quantity = newQty;
+        renderAll();
+
         const { error } = await supabaseClient
             .from('shopping_items')
             .update({ wanted_users: serializeWantedUsers(parsed), quantity: newQty })
             .eq('id', itemId);
-        if (error) { console.error('heartToggle error:', error); alert('更新に失敗しました'); return; }
+        if (error) { 
+            console.error('heartToggle error:', error); 
+            alert('更新に失敗しました'); 
+            await loadData();
+        }
     }
-
-    await loadData();
 }
 
 // ===== 追加 =====
@@ -452,22 +582,23 @@ async function handleAddItem(e) {
 
     const file = document.getElementById('item-image').files[0];
     if (file) {
-        const reader = new FileReader();
-        reader.onload = async ev => { data.image_url = ev.target.result; await pushItem(data, btn); };
-        reader.readAsDataURL(file);
-    } else {
-        await pushItem(data, btn);
+        const url = await uploadImageToStorage(file);
+        if (url) data.image_url = url;
     }
+    await pushItem(data, btn);
 }
 
 async function pushItem(data, btn) {
-    const { error } = await supabaseClient.from('shopping_items').insert([data]);
+    const { data: insertedData, error } = await supabaseClient.from('shopping_items').insert([data]).select();
     if (error) {
         console.error('pushItem error:', error);
         alert('追加に失敗しました: ' + error.message);
-    } else {
+    } else if (insertedData && insertedData.length > 0) {
+        const item = insertedData[0];
+        shoppingList.unshift(mapItemData(item));
+        expandedSpaces.add(item.space_no);
         closeAddModal();
-        await loadData();
+        renderAll();
     }
     btn.disabled = false;
 }
@@ -520,25 +651,48 @@ async function handleEditItem(e) {
 
     const file = document.getElementById('edit-item-image').files[0];
     if (file) {
-        const r = new FileReader();
-        r.onload = async ev => { body.image_url = ev.target.result; await updateItem(id, body); };
-        r.readAsDataURL(file);
-    } else {
-        await updateItem(id, body);
+        const url = await uploadImageToStorage(file);
+        if (url) body.image_url = url;
     }
+    await updateItem(id, body);
 }
 
 async function updateItem(id, body) {
+    // 楽観的UI更新
+    const item = shoppingList.find(i => i.id === id);
+    if (item) {
+        if (body.space_no) item.spaceNo = body.space_no;
+        if (body.item_name) item.name = body.item_name;
+        if (body.price !== undefined) item.price = body.price;
+        if (body.quantity !== undefined) item.quantity = body.quantity;
+        if (body.notes !== undefined) item.notes = body.notes;
+        if (body.wanted_users) item.wantedUsers = body.wanted_users.split(',').filter(x => x);
+        if (body.image_url !== undefined) item.imageUrl = body.image_url;
+        renderAll();
+    }
+
     const { error } = await supabaseClient.from('shopping_items').update(body).eq('id', id);
-    if (error) console.error('updateItem error:', error);
+    if (error) {
+        console.error('updateItem error:', error);
+        await loadData();
+    }
     closeEditModal();
-    await loadData();
 }
 
 async function deleteItem(id) {
     if (!confirm('削除しますか？')) return;
-    await supabaseClient.from('shopping_items').delete().eq('id', id);
-    await loadData();
+    
+    // 楽観的UI削除
+    shoppingList = shoppingList.filter(i => i.id !== id);
+    renderShoppingList();
+    renderPersonList();
+    updateStats();
+
+    const { error } = await supabaseClient.from('shopping_items').delete().eq('id', id);
+    if (error) {
+        console.error('deleteItem error:', error);
+        await loadData();
+    }
 }
 
 // ===== 画像プレビュー =====
@@ -569,7 +723,7 @@ function exportData() {
     const blob = new Blob([JSON.stringify(exportItems, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `shopping_list_v10_${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `shopping_list_v12_${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
 }
 
@@ -581,9 +735,10 @@ async function importData(e) {
         try {
             const imported = JSON.parse(ev.target.result);
             if (!confirm(`${imported.length}件のデータを追加しますか？`)) return;
-            for (const raw of imported) {
+            
+            const items = imported.map(raw => {
                 const qty = raw.quantity || 1;
-                const item = {
+                return {
                     space_no: raw.space_no || raw.spaceNo || '未分類',
                     item_name: raw.item_name || raw.name || '無名',
                     price: raw.price || 0,
@@ -595,11 +750,15 @@ async function importData(e) {
                     user_icon: raw.user_icon || raw.userIcon || currentUser.icon,
                     wanted_users: raw.wanted_users || `${raw.user_name || currentUser.name}:${raw.user_icon || currentUser.icon}:${qty}`
                 };
-                await supabaseClient.from('shopping_items').insert([item]);
-            }
+            });
+
+            const { error } = await supabaseClient.from('shopping_items').insert(items);
+            if (error) throw error;
+            
             alert('インポート完了！');
             await loadData();
         } catch (err) {
+            console.error('Import error:', err);
             alert('読み込みエラー。ファイルを確認してください。');
         }
     };
